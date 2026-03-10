@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ConversationSource {
+  WEB
+  WHATSAPP
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+enum CrmUserRole {
+  ADMIN
+  SALES
+}
+
+model Conversation {
+  id           String             @id @default(cuid())
+  source       ConversationSource
+  contactPhone String?
+  contactName  String?
+  contactEmail String?
+  summary      String?
+  sentiment    String?
+  tags         String[]
+  language     String?
+  messageCount Int                @default(0)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  messages     Message[]
+  leads        Lead[]
+  appointments Appointment[]
+  events       ConversationEvent[]
+
+  @@index([contactPhone])
+  @@index([source])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           String
+  content        String
+  toolName       String?
+  toolArgs       Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model Lead {
+  id                 String             @id @default(cuid())
+  conversationId     String?
+  conversation       Conversation?      @relation(fields: [conversationId], references: [id])
+  name               String
+  email              String?
+  phone              String?
+  vehicleInterest    String?
+  source             ConversationSource
+  status             LeadStatus         @default(NEW)
+  notes              String?
+  budgetMin          Float?
+  budgetMax          Float?
+  timeline           String?
+  tradeInVehicle     String?
+  city               String?
+  purchaseType       String?
+  financingInterest  Boolean            @default(false)
+  leadScore          Int                @default(0)
+  qualificationLevel String?
+  lastContactedAt    DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([status])
+  @@index([phone])
+  @@index([leadScore])
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  conversationId  String?
+  conversation    Conversation?     @relation(fields: [conversationId], references: [id])
+  name            String
+  email           String?
+  phone           String?
+  vehicle         String?
+  preferredDate   DateTime?
+  preferredTime   String?
+  location        String?
+  appointmentType String?
+  status          AppointmentStatus @default(PENDING)
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([status])
+  @@index([preferredDate])
+}
+
+model Vehicle {
+  id          String        @id @default(cuid())
+  model       String
+  variant     String?
+  color       String?
+  status      VehicleStatus @default(AVAILABLE)
+  price       Float?
+  stockCount  Int           @default(0)
+  description String?
+  specs       Json?
+  imageUrl    String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([model, status])
+}
+
+model ConversationEvent {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  type           String
+  detail         String?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([type])
+}
+
+model CrmUser {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String
+  role         CrmUserRole @default(SALES)
+  createdAt    DateTime    @default(now())
+}

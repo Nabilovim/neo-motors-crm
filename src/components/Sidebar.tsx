@@ -2,14 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Car, Calendar, MessageSquare, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, Car, Tag, Calendar, MessageSquare, LogOut, BarChart3, Columns3, HelpCircle, UserCog, Target, Download, PhoneForwarded } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/leads", label: "Leads", icon: Users },
   { href: "/dashboard/vehicles", label: "Véhicules", icon: Car },
+  { href: "/dashboard/promotions", label: "Promotions", icon: Tag },
+  { href: "/dashboard/faq", label: "FAQ", icon: HelpCircle },
   { href: "/dashboard/appointments", label: "Rendez-vous", icon: Calendar },
   { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
+  { href: "/dashboard/pipeline", label: "Pipeline", icon: Columns3 },
+  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/commercial", label: "Commercial", icon: Target },
+  { href: "/dashboard/relance", label: "Relance", icon: PhoneForwarded },
+  { href: "/dashboard/exports", label: "Exports", icon: Download },
+  { href: "/dashboard/users", label: "Utilisateurs", icon: UserCog },
 ];
 
 export function Sidebar() {

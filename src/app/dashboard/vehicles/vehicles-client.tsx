@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Search, X, Plus, Minus, Trash2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Search, X, Plus, Minus, Trash2, ChevronDown, ChevronRight, Package } from "lucide-react";
 
 interface Vehicle {
   id: string;
@@ -16,6 +16,13 @@ interface Vehicle {
   imageUrl: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface ModelGroup {
+  model: string;
+  variants: Vehicle[];
+  totalStock: number;
+  availableCount: number;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -45,9 +52,11 @@ export function VehiclesClient({ vehicles }: { vehicles: Vehicle[] }) {
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [selected, setSelected] = useState<Vehicle | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [addToModel, setAddToModel] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const filtered = vehicles.filter((v) => {
     if (filterStatus !== "ALL" && v.status !== filterStatus) return false;
@@ -62,6 +71,30 @@ export function VehiclesClient({ vehicles }: { vehicles: Vehicle[] }) {
     return true;
   });
 
+  // Group by model
+  const groups: ModelGroup[] = useMemo(() => {
+    const map = new Map<string, Vehicle[]>();
+    for (const v of filtered) {
+      if (!map.has(v.model)) map.set(v.model, []);
+      map.get(v.model)!.push(v);
+    }
+    return Array.from(map.entries()).map(([model, variants]) => ({
+      model,
+      variants,
+      totalStock: variants.reduce((sum, v) => sum + v.stockCount, 0),
+      availableCount: variants.filter((v) => v.status === "AVAILABLE").length,
+    }));
+  }, [filtered]);
+
+  const toggleCollapse = (model: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(model)) next.delete(model);
+      else next.add(model);
+      return next;
+    });
+  };
+
   const addVehicle = async () => {
     if (!form.model.trim()) return;
     setSaving(true);
@@ -72,6 +105,7 @@ export function VehiclesClient({ vehicles }: { vehicles: Vehicle[] }) {
     });
     setSaving(false);
     setShowAdd(false);
+    setAddToModel(null);
     setForm(EMPTY_FORM);
     window.location.reload();
   };
@@ -86,7 +120,7 @@ export function VehiclesClient({ vehicles }: { vehicles: Vehicle[] }) {
   };
 
   const deleteVehicle = async (id: string) => {
-    if (!window.confirm("Supprimer ce véhicule ?")) return;
+    if (!window.confirm("Supprimer cette variante ?")) return;
     await fetch(`/api/vehicles/${id}`, { method: "DELETE" });
     window.location.reload();
   };
@@ -117,14 +151,22 @@ export function VehiclesClient({ vehicles }: { vehicles: Vehicle[] }) {
     window.location.reload();
   };
 
+  const openAddForModel = (model: string) => {
+    setForm({ ...EMPTY_FORM, model });
+    setAddToModel(model);
+    setShowAdd(true);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Véhicules</h1>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-400">{filtered.length} véhicule(s)</span>
+          <span className="text-sm text-gray-400">
+            {groups.length} modèle(s) — {filtered.length} variante(s)
+          </span>
           <button
-            onClick={() => { setShowAdd(true); setForm(EMPTY_FORM); }}
+            onClick={() => { setShowAdd(true); setAddToModel(null); setForm(EMPTY_FORM); }}
             className="flex items-center gap-2 px-4 py-2 bg-[#dc2626] text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -157,71 +199,120 @@ export function VehiclesClient({ vehicles }: { vehicles: Vehicle[] }) {
         </select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-gray-100">
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Modèle</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Variante</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Couleur</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Prix</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Stock</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Statut</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Mis à jour</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((v) => (
-              <tr
-                key={v.id}
-                onClick={() => { setSelected(v); setEditMode(false); }}
-                className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+      {/* Grouped Table */}
+      <div className="space-y-4">
+        {groups.map((group) => {
+          const isCollapsed = collapsed.has(group.model);
+          return (
+            <div key={group.model} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              {/* Model Header */}
+              <div
+                onClick={() => toggleCollapse(group.model)}
+                className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
               >
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">{v.model}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{v.variant || "—"}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{v.color || "—"}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  {v.price ? `${v.price.toLocaleString("fr-FR")} MAD` : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`text-sm font-mono ${v.stockCount <= 2 ? "text-red-600 font-semibold" : "text-gray-600"}`}>
-                    {v.stockCount}
+                <div className="flex items-center gap-3">
+                  {isCollapsed ? (
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                  )}
+                  <h2 className="text-lg font-bold text-gray-900">{group.model}</h2>
+                  <span className="text-sm text-gray-400">
+                    {group.variants.length} variante(s)
                   </span>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[v.status] || "bg-gray-100 text-gray-500"}`}>
-                    {STATUS_LABELS[v.status] || v.status}
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-gray-400" />
+                    <span className={`text-sm font-semibold ${group.totalStock <= 2 ? "text-red-600" : "text-gray-700"}`}>
+                      {group.totalStock} en stock
+                    </span>
+                  </div>
+                  <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                    {group.availableCount} disponible(s)
                   </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-400">
-                  {new Date(v.updatedAt).toLocaleDateString("fr-FR")}
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  Aucun véhicule trouvé
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openAddForModel(group.model); }}
+                    className="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
+                    title="Ajouter une variante"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Variants Table */}
+              {!isCollapsed && (
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-t border-gray-100 bg-gray-50/50">
+                      <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500 uppercase w-12"></th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 uppercase">Variante</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 uppercase">Couleur</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 uppercase">Prix</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 uppercase">Stock</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 uppercase">Statut</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 uppercase">Mis à jour</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.variants.map((v) => (
+                      <tr
+                        key={v.id}
+                        onClick={() => { setSelected(v); setEditMode(false); }}
+                        className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        <td className="px-5 py-3"></td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{v.variant || "Standard"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{v.color || "—"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {v.price ? `${v.price.toLocaleString("fr-FR")} MAD` : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-sm font-mono ${v.stockCount <= 2 ? "text-red-600 font-semibold" : "text-gray-600"}`}>
+                            {v.stockCount}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[v.status] || "bg-gray-100 text-gray-500"}`}>
+                            {STATUS_LABELS[v.status] || v.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-400">
+                          {new Date(v.updatedAt).toLocaleDateString("fr-FR")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })}
+
+        {groups.length === 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-12 text-center text-gray-400 text-sm">
+            Aucun véhicule trouvé
+          </div>
+        )}
       </div>
 
       {/* Add Vehicle Modal */}
       {showAdd && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowAdd(false)}>
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => { setShowAdd(false); setAddToModel(null); }}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">Nouveau véhicule</h2>
-              <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-lg font-bold text-gray-900">
+                {addToModel ? `Nouvelle variante — ${addToModel}` : "Nouveau véhicule"}
+              </h2>
+              <button onClick={() => { setShowAdd(false); setAddToModel(null); }} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-5 space-y-4">
-              <FormField label="Modèle *" value={form.model} onChange={(v) => setForm({ ...form, model: v })} placeholder="Ex: Dial-E, G-Neo, Neo 4-Cylindres" />
+              {!addToModel && (
+                <FormField label="Modèle *" value={form.model} onChange={(v) => setForm({ ...form, model: v })} placeholder="Ex: Dial-E, G-Neo, Neo 4-Cylindres" />
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <FormField label="Variante" value={form.variant} onChange={(v) => setForm({ ...form, variant: v })} placeholder="Ex: DC, AC, Lithium" />
                 <FormField label="Couleur" value={form.color} onChange={(v) => setForm({ ...form, color: v })} placeholder="Ex: Rouge, Blanc" />
@@ -234,7 +325,7 @@ export function VehiclesClient({ vehicles }: { vehicles: Vehicle[] }) {
               <FormField label="Image URL" value={form.imageUrl} onChange={(v) => setForm({ ...form, imageUrl: v })} placeholder="https://..." />
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+              <button onClick={() => { setShowAdd(false); setAddToModel(null); }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
                 Annuler
               </button>
               <button
@@ -254,12 +345,13 @@ export function VehiclesClient({ vehicles }: { vehicles: Vehicle[] }) {
         <div className="fixed inset-0 bg-black/30 z-50 flex justify-end" onClick={() => setSelected(null)}>
           <div className="w-full max-w-md bg-white h-full overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xl font-bold text-gray-900">{selected.model}</h2>
                 <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600">
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              <p className="text-sm text-gray-500 mb-5">{selected.variant || "Standard"} {selected.color ? `— ${selected.color}` : ""}</p>
 
               {!editMode ? (
                 <div className="space-y-4">
@@ -291,7 +383,7 @@ export function VehiclesClient({ vehicles }: { vehicles: Vehicle[] }) {
                   {/* Details */}
                   <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
                     <Detail label="Modèle" value={selected.model} />
-                    <Detail label="Variante" value={selected.variant} />
+                    <Detail label="Variante" value={selected.variant || "Standard"} />
                     <Detail label="Couleur" value={selected.color} />
                     <Detail label="Prix" value={selected.price ? `${selected.price.toLocaleString("fr-FR")} MAD` : null} />
                     <Detail label="Description" value={selected.description} />
